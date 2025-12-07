@@ -1,0 +1,43 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+config/secrets.toml
+
+# Logs
+logs/
+*.log
+
+# Gradio cache
+.gradio/
+
+# Output files
+output_files/*.json
+output_files/*.csv
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
