@@ -6,12 +6,11 @@ Integer,
 Text,
 JSON,
 event,
-text as sql_text,
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pgvector.sqlalchemy import Vector
 from pgvector.psycopg import register_vector
-from config.settings import DATABASE_URL, EMBED_DIM
+from enterprice_rag.config.settings import DATABASE_URL, EMBED_DIM
 # ---------- DB setup ----------
 Base = declarative_base()
 
@@ -22,8 +21,10 @@ class Chunk(Base):
     doc_id = Column(Text, index=True)
     chunk_id = Column(Integer, index=True)
     content = Column(Text)
+    context = Column(Text)  # Anthropic Contextual Retrieval
     metadatas = Column(JSON)
     embedding = Column(Vector(EMBED_DIM))
+    search_vector = Column(Text)  # For keyword search (PostgreSQL tsvector)
 
 
 # Create engine and register vector type on connect

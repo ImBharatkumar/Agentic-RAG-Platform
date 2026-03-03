@@ -1,6 +1,6 @@
 import requests
 import json
-from config.settings import OLLAMA_BASE_URL, MODELS
+from enterprice_rag.config.settings import OLLAMA_BASE_URL, MODELS
 
 
 def query_ollama(prompt: str, task: str = "generation", temperature: float = 0.3):
@@ -33,7 +33,7 @@ def query_ollama(prompt: str, task: str = "generation", temperature: float = 0.3
         "options": {
             "temperature": temperature,
             "top_p": 0.9,
-            "num_predict": 1024 if task == "generation" else 128,
+            "num_predict": 1024 if task in ["generation", "context_generation"] else 128,
         },
     }
 
@@ -45,9 +45,8 @@ def query_ollama(prompt: str, task: str = "generation", temperature: float = 0.3
         result = response.json()
         answer = result.get("response", "").strip()
 
-        # Handle DeepSeek-R1 reasoning format
-        if "deepseek-r1" in model.lower():
-            answer = extract_deepseek_answer(answer)
+        # Always attempt to extract final answer if reasoning tags exist
+        answer = extract_reasoning_answer(answer)
 
         return answer
 
@@ -59,26 +58,21 @@ def query_ollama(prompt: str, task: str = "generation", temperature: float = 0.3
         return "Error: Invalid response from LLM."
 
 
-def extract_deepseek_answer(text: str) -> str:
+def extract_reasoning_answer(text: str) -> str:
     """
-    Extract final answer from DeepSeek-R1's reasoning output.
-    DeepSeek wraps reasoning in <think>...</think> tags.
+    Extract final answer from models that output reasoning (e.g. DeepSeek-R1, Phi-4).
+    Commonly wraps reasoning in <think>...</think> tags.
     """
-    # Remove <think>...</think> blocks
     import re
-
+    # Remove <think>...</think> blocks if present
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     cleaned = cleaned.strip()
 
-    # If empty after removing think tags, return original
-    if not cleaned:
+    if not cleaned and "</think>" in text:
         # Fallback: take content after last </think>
-        if "</think>" in text:
-            cleaned = text.split("</think>")[-1].strip()
-        else:
-            cleaned = text
-
-    return cleaned
+        cleaned = text.split("</think>")[-1].strip()
+    
+    return cleaned if cleaned else text
 
 
 def query_ollama_stream(prompt: str, task: str = "generation"):

@@ -1,6 +1,6 @@
 from google.adk.agents import Agent
 from google.adk.tools import FunctionTool
-from processing.rag_chain import rag_chain
+from enterprice_rag.processing.rag_chain import rag_chain
 
 # Example: Adding instructions
 rag_agent = Agent(

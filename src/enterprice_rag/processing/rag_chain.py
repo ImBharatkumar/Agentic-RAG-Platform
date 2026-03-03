@@ -1,15 +1,10 @@
-import sys
-import os
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from ingestion.pdf_ingest import docling_ocr
-from storage.vector_store import process_document
-from processing.retriever import search
-from storage.postgres_client import SessionLocal
-from processing.llm_infer import query_ollama_stream
 from pathlib import Path
-from utils.excel_writer import save_query_to_csv
+from enterprice_rag.ingestion.pdf_ingest import docling_ocr
+from enterprice_rag.storage.vector_store import process_document
+from enterprice_rag.processing.retriever import search
+from enterprice_rag.storage.postgres_client import SessionLocal
+from enterprice_rag.processing.llm_infer import query_ollama_stream
+from enterprice_rag.utils.excel_writer import save_query_to_csv
 
 # ============================================================================
 # SIMPLE PROMPTS
@@ -107,7 +102,7 @@ if __name__ == "__main__":
     # print(result)
 
     # # Example 3: Use agentic RAG
-    from agents.langgraph_agent import run_agent
+    from enterprice_rag.agents.langgraph_agent import run_agent
 
     result = run_agent("Production and productivity in agriculture.")
     print("\n" + "=" * 50)

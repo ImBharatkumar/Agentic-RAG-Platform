@@ -1,16 +1,11 @@
-import gradio as gr
-import sys
 import os
 import tempfile
 from pathlib import Path
-
-# Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from processing.rag_chain import rag_chain
-from agents.langgraph_agent import run_agent
-from ingestion.pdf_ingest import docling_ocr
-from storage.vector_store import process_document
-from storage.postgres_client import SessionLocal
+import gradio as gr
+from enterprice_rag.agents.langgraph_agent import run_agent
+from enterprice_rag.ingestion.pdf_ingest import docling_ocr
+from enterprice_rag.storage.vector_store import process_document
+from enterprice_rag.storage.postgres_client import SessionLocal
 
 
 def answer_question(query):
