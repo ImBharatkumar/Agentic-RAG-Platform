@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from enterprice_rag.agents.langgraph_agent import run_agent
+from enterprice_rag.agents.rag_agent.graph import run_agent
 from enterprice_rag.storage.vector_store import process_document
 from enterprice_rag.storage.postgres_client import SessionLocal
 from enterprice_rag.ingestion.pdf_ingest import docling_ocr

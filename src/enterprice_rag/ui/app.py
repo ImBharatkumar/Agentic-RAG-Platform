@@ -2,7 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 import gradio as gr
-from enterprice_rag.agents.langgraph_agent import run_agent
+from enterprice_rag.agents.rag_agent.graph import run_agent
 from enterprice_rag.ingestion.pdf_ingest import docling_ocr
 from enterprice_rag.storage.vector_store import process_document
 from enterprice_rag.storage.postgres_client import SessionLocal
@@ -12,12 +12,18 @@ def answer_question(query):
     """
     This function takes a user query, passes it to the RAG agent, and streams the response.
     """
+    print(f"DEBUG: Gradio received query: '{query}'")
+    if not query or not query.strip():
+        yield "Please enter a valid question."
+        return
+
     try:
         full_answer = ""
         for chunk in run_agent(query):
             full_answer += chunk
             yield full_answer
     except Exception as e:
+        print(f"DEBUG: Error in answer_question: {e}")
         yield f"An error occurred: {e}"
 
 

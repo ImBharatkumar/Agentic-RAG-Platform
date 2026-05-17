@@ -44,9 +44,12 @@ def query_ollama(prompt: str, task: str = "generation", temperature: float = 0.3
         response.raise_for_status()
         result = response.json()
         answer = result.get("response", "").strip()
+        print(f"DEBUG: Ollama response length: {len(answer)}")
 
         # Always attempt to extract final answer if reasoning tags exist
         answer = extract_reasoning_answer(answer)
+        if not answer:
+            print(f"DEBUG: Extract reasoning returned empty string for: '{result.get('response', '')[:100]}...'")
 
         return answer
 

@@ -29,9 +29,6 @@ def generate_context(doc_text: str, chunk_text: str) -> str:
 
 def embed_texts(texts: List[str], task_type="retrieval_document") -> List[List[float]]:
     """Embeds a list of texts using Google's gemini-embedding-001 model."""
-    if not texts:
-        return []
-
     if task_type == "retrieval_document":
         config_task_type = "RETRIEVAL_DOCUMENT"
     elif task_type == "retrieval_query":
@@ -39,15 +36,41 @@ def embed_texts(texts: List[str], task_type="retrieval_document") -> List[List[f
     else:
         config_task_type = "SEMANTIC_SIMILARITY"
 
-    result = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=texts,
-        config=types.EmbedContentConfig(
-            task_type=config_task_type, output_dimensionality=EMBED_DIM
-        ),
-    ).embeddings
+    # Prepare results list
+    embeddings = [None] * len(texts)
+    valid_indices = []
+    texts_to_send = []
 
-    return [e.values for e in result]
+    for i, text in enumerate(texts):
+        if text and text.strip():
+            valid_indices.append(i)
+            texts_to_send.append(text)
+        else:
+            # Return zero vector for empty/whitespace strings
+            embeddings[i] = [0.0] * EMBED_DIM
+
+    if not texts_to_send:
+        return embeddings
+
+    try:
+        result = client.models.embed_content(
+            model="gemini-embedding-001",
+            contents=texts_to_send,
+            config=types.EmbedContentConfig(
+                task_type=config_task_type, output_dimensionality=EMBED_DIM
+            ),
+        ).embeddings
+
+        for i, emb in enumerate(result):
+            embeddings[valid_indices[i]] = emb.values
+
+    except Exception as e:
+        print(f"DEBUG: Error embedding texts: {e}")
+        # Fallback for the whole batch if it fails
+        for i in valid_indices:
+            embeddings[i] = [0.0] * EMBED_DIM
+
+    return embeddings
 
 
 def embed_and_chunk_text(

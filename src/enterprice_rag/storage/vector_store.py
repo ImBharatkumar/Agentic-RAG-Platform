@@ -1,53 +1,46 @@
+from typing import List, Dict, Any
+from enterprice_rag.processing.chunker import chunk_text
+from enterprice_rag.core.factory import get_embedding, get_vector_store
 from enterprice_rag.utils.text_utils import split_into_sentences
-from enterprice_rag.processing.embedder import embed_and_chunk_text
-from enterprice_rag.storage.postgres_client import Chunk
 
-
-# ---------- Main document processing pipeline ----------
 def process_document(
     doc_id: str,
     text: str,
-    session,
+    session=None,  # session is now handled inside VectorStoreProvider
     *,
     generate_descriptions: bool = True,
     use_llm_for_description: bool = False,
 ) -> int:
     """
-    Processes a document using sentence-based chunking and stores embeddings in Postgres.
+    Processes a document using sentence-based chunking and stores embeddings in the vector store.
     """
-
-    chunks_data = embed_and_chunk_text(text)
+    # 1. Chunking
+    chunks_data = chunk_text(text, generate_context_bool=generate_descriptions)
     if not chunks_data:
         print(f"[WARN] No chunks generated for document: {doc_id}")
         return 0
 
-    inserted = 0
-    for chunk_idx, chunk_info in enumerate(chunks_data):
-        chunk_content = chunk_info["content"]
-        chunk_context = chunk_info.get("context", "")
-        chunk_embedding = chunk_info["embedding"]
+    # 2. Embedding
+    embedding_provider = get_embedding()
+    contents_to_embed = []
+    for chunk in chunks_data:
+        situated_content = f"{chunk['context']}\n\n{chunk['content']}" if chunk['context'] else chunk['content']
+        contents_to_embed.append(situated_content)
+    
+    embeddings = embedding_provider.embed_batch(contents_to_embed, task_type="retrieval_document")
+    
+    for i, emb in enumerate(embeddings):
+        chunks_data[i]["embedding"] = emb
+        # Add metadata
+        chunks_data[i]["metadatas"] = {
+            "doc_id": doc_id,
+            "chunk_idx": i,
+            "sent_count": len(split_into_sentences(chunks_data[i]["content"]))
+        }
 
-        sentence_count = len(split_into_sentences(chunk_content))
-        
-        # Combined text for keyword search (content + context)
-        search_text = f"{chunk_content} {chunk_context}"
+    # 3. Upserting
+    vector_store = get_vector_store()
+    inserted = vector_store.upsert(doc_id, chunks_data)
 
-        row = Chunk(
-            doc_id=doc_id,
-            chunk_id=chunk_idx,
-            content=chunk_content,
-            context=chunk_context,
-            metadatas={
-                "doc_id": doc_id,
-                "chunk_idx": chunk_idx,
-                "sent_count": sentence_count,
-            },
-            embedding=chunk_embedding,
-            search_vector=search_text  # Will be converted to tsvector in SQL or via trigger
-        )
-        session.add(row)
-        inserted += 1
-
-    session.commit()
     print(f"[INFO] Inserted {inserted} chunks for document: {doc_id}")
     return inserted

@@ -12,7 +12,9 @@ from enterprice_rag.utils.excel_writer import save_query_to_csv
 # OPTIMIZED PROMPTS - SHORT & GENERAL
 # ============================================================================
 
-QUERY_REWRITE_PROMPT = """Rewrite this search query to be more specific and searchable:
+QUERY_REWRITE_PROMPT = """You are a search query optimizer. 
+Rewrite the following search query to be highly effective for vector search (semantic retrieval) and keyword search.
+Output ONLY the rewritten query and nothing else.
 
 Original: {query}
 
@@ -64,6 +66,7 @@ def query_analyzer(state):
     """Rewrites query for better search."""
     print("---ANALYZING QUERY---")
     original_query = state["original_query"]
+    print(f"DEBUG: original_query in analyzer: '{original_query}'")
     iterations = state.get("iterations", 0)
 
     if iterations > 0:
@@ -83,7 +86,12 @@ def query_analyzer(state):
         prompt = QUERY_REWRITE_PROMPT.format(query=original_query)
         rewritten_query = query_ollama(prompt, task="query_rewrite").strip()
 
-    print(f"Query: {rewritten_query}")
+    # Fallback if LLM returns empty or fails
+    if not rewritten_query:
+        print("DEBUG: Rewritten query was empty, falling back to original.")
+        rewritten_query = original_query
+
+    print(f"Query: '{rewritten_query}'")
     return {"rewritten_query": rewritten_query, "iterations": iterations + 1}
 
 

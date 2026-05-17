@@ -35,11 +35,11 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # Option 1: Multi-model setup (RECOMMENDED)
 MODELS = {
-    "query_rewrite": "qwen3:4b",  # Fast query reformulation
+    "query_rewrite": "granite4.1:3b",  # Fast query reformulation (Switched from qwen3)
     "reflection": "phi4-mini-reasoning:3.8b",  # Binary decision making
-    "generation": "granite4:latest",  # Best reasoning for answers
+    "generation": "granite4.1:3b",  # Best reasoning for answers
     "context_generation": "phi4-mini-reasoning:3.8b",  # For Contextual Retrieval
-    "llm": "qwen3:4b",  # Fallback/default
+    "llm": "granite4.1:3b",  # Fallback/default (Switched from qwen3)
 }
 
 
@@ -53,7 +53,7 @@ MAX_ITERATIONS = 2  # For agentic loop
 # ============================================================================
 # API KEYS (for embedding)
 # ============================================================================
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyAsDEG1kzv6zm21eBizHK06zdFbDbyKTSM")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyB2RAGTPsW3M7LzLMpgVVVGgZgTn5FBI1g")
 # ============================================================================
 # LOGGING
 # ============================================================================
