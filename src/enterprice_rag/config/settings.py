@@ -14,7 +14,7 @@ OUTPUT_DIR = BASE_DIR / "output_files"
 
 # ---------- Configuration ----------
 
-DATABASE_URL = "postgresql+psycopg://postgres:Barry#1430@localhost:5432/rag"
+DATABASE_URL = ""
 
 
 # EMBEDDING SETTINGS
@@ -46,14 +46,14 @@ MODELS = {
 # ============================================================================
 # RAG SETTINGS
 # ============================================================================
-DEFAULT_TOP_K = 7  # Reduced from 5 (less noise)
+DEFAULT_TOP_K = 5  # Reduced from 5 (less noise)
 MAX_CONTEXT_LENGTH = 2000  # Max chars per chunk in context
 MAX_ITERATIONS = 2  # For agentic loop
 
 # ============================================================================
 # API KEYS (for embedding)
 # ============================================================================
-GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "AIzaSyB2RAGTPsW3M7LzLMpgVVVGgZgTn5FBI1g")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 # ============================================================================
 # LOGGING
 # ============================================================================

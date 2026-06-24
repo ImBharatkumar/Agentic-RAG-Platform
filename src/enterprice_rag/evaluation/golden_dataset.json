@@ -1,0 +1,12 @@
+[
+  {
+    "question": "When was the Golden Gate Bridge opened?",
+    "ground_truth": "The Golden Gate Bridge was opened in 1937.",
+    "ground_truth_context": ["It was opened in 1937 and was once the longest and tallest suspension bridge in the world."]
+  },
+  {
+    "question": "Why was the International Orange color chosen for the Golden Gate Bridge?",
+    "ground_truth": "The International Orange color was chosen because it provides high visibility in fog.",
+    "ground_truth_context": ["Its signature International Orange color was chosen because it provides high visibility in fog."]
+  }
+]

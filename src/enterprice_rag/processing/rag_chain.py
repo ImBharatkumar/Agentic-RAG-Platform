@@ -102,7 +102,7 @@ if __name__ == "__main__":
     # print(result)
 
     # # Example 3: Use agentic RAG
-    from enterprice_rag.agents.langgraph_agent import run_agent
+    from enterprice_rag.agents.rag_agent.graph import run_agent
 
     result = run_agent("Production and productivity in agriculture.")
     print("\n" + "=" * 50)
