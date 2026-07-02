@@ -28,8 +28,9 @@ class OllamaLLM(LLMProvider):
             "options": {
                 "temperature": temperature,
                 "top_p": 0.9,
-                "num_predict": 1024 if task in ["generation", "context_generation"] else 128,
+                "num_predict": 1024 if (task in ["generation", "context_generation"] or "reasoning" in model.lower() or "r1" in model.lower()) else 128,
             },
+
         }
 
         try:
