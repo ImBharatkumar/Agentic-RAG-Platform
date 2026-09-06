@@ -1,7 +1,8 @@
-from langchain_core.messages import HumanMessage, AIMessage
 from enterprice_rag.core.factory import get_llm, get_embedding, get_vector_store
 from enterprice_rag.config.settings import DEFAULT_TOP_K
 from enterprice_rag.utils.excel_writer import save_query_to_csv
+from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import HumanMessage, AIMessage
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -167,36 +168,67 @@ def reflection(state):
     return {"reflection": decision}
 
 
-def generator(state):
+def generator(state, config: RunnableConfig):
     print("---GENERATING---")
+
     llm = get_llm()
     original_query = state["original_query"]
-    
+    token_queue = config["configurable"]["token_queue"]
+
     # If route is generate, we skip retrieval context to avoid noise
-    context = state.get("context", []) if state.get("route") != "generate" else []
+    context = (
+        state.get("context", [])
+        if state.get("route") != "generate"
+        else []
+    )
     messages = state.get("messages", [])
 
     history_msgs = messages[:-1][-6:] if len(messages) > 1 else []
+
     if history_msgs:
         history_str = "\n".join(
             f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
             for m in history_msgs
         )
-        context_str = "\n---\n".join([c["content"] for c in context]) if context else "(No context retrieved)"
+        context_str = (
+            "\n---\n".join(c["content"] for c in context)
+            if context
+            else "(No context retrieved)"
+        )
         prompt = GENERATION_PROMPT_WITH_HISTORY.format(
-            history=history_str, query=original_query, context=context_str
+            history=history_str,
+            query=original_query,
+            context=context_str,
         )
     else:
-        context_str = "\n---\n".join([c["content"] for c in context])
-        prompt = GENERATION_PROMPT.format(query=original_query, context=context_str)
+        context_str = "\n---\n".join(c["content"] for c in context)
+        prompt = GENERATION_PROMPT.format(
+            query=original_query,
+            context=context_str,
+        )
 
-    # Use blocking generate() so the full answer can be stored in the checkpoint
-    full_answer = llm.generate(prompt, task="generation")
+    chat_model = llm.get_chat_model(task="generation")
+
+    # Stream the final response token-by-token
+    full_answer = ""
+    for chunk in chat_model.stream([HumanMessage(content=prompt)]):
+        if not chunk.content:
+            continue
+
+        token = chunk.content
+        full_answer += token
+        token_queue.put(token)
+
+    full_answer = llm._clean(full_answer)
 
     # Persist Q&A to CSV log
     if context:
-        source_document = list(set([c["doc_id"] for c in context]))
-        save_query_to_csv(original_query, full_answer, ", ".join(source_document))
+        source_document = list({c["doc_id"] for c in context})
+        save_query_to_csv(
+            original_query,
+            full_answer,
+            ", ".join(source_document),
+        )
 
     return {
         "answer": full_answer,

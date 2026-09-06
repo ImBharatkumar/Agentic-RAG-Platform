@@ -1,107 +1,58 @@
-import requests
-import json
 import re
 from typing import Generator, Optional
-from enterprice_rag.core.interfaces import LLMProvider
+from langchain_ollama import ChatOllama
+from langchain_core.messages import HumanMessage
 from enterprice_rag.config.settings import OLLAMA_BASE_URL, MODELS
 
-class OllamaLLM(LLMProvider):
-    def __init__(self, base_url: str = OLLAMA_BASE_URL):
-        self.base_url = base_url
 
-    def generate(self, prompt: str, task: str = "generation", temperature: Optional[float] = None, **kwargs) -> str:
-        model = MODELS.get(task, MODELS.get("llm", "nemotron-mini:latest"))
-        
-        # Task-specific temperature overrides
-        temp_map = {
-            "query_rewrite": 0.5,
-            "reflection": 0.1,
-            "generation": 0.3,
-        }
-        if temperature is None:
-            temperature = temp_map.get(task, 0.3)
+class OllamaLLM:
+    """Thin wrapper around langchain-ollama's ChatOllama.
 
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "top_p": 0.9,
-                "num_predict": 1024 if (task in ["generation", "context_generation"] or "reasoning" in model.lower() or "r1" in model.lower()) else 128,
-            },
+    - generate()  → blocking call, strips <think> blocks from reasoning models.
+    - stream()    → token-level generator (used by graph.py callback handler).
+    - get_chat_model() → returns a raw ChatOllama for use with LangChain callbacks.
+    """
 
-        }
+    # Temperature per task
+    _TEMPS = {"query_rewrite": 0.5, "reflection": 0.1, "generation": 0.3}
 
-        try:
-            response = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=300)
-            response.raise_for_status()
-            result = response.json()
-            answer = result.get("response", "").strip()
-            return self._extract_reasoning_answer(answer)
-        except Exception as e:
-            print(f"Error querying Ollama ({model}): {e}")
-            return f"Error: {e}"
+    def _build(self, task: str, streaming: bool = False) -> ChatOllama:
+        model = MODELS.get(task, MODELS.get("llm", "granite4.1:3b"))
+        temp = self._TEMPS.get(task, 0.3)
+        # Give reasoning models a higher token budget so they can finish thinking
+        is_reasoning = "reasoning" in model.lower() or "r1" in model.lower()
+        num_predict = 1024 if (task in ["generation", "context_generation"] or is_reasoning) else 128
+        return ChatOllama(
+            base_url=OLLAMA_BASE_URL,
+            model=model,
+            temperature=temp,
+            num_predict=num_predict,
+            streaming=streaming,
+        )
+
+    # ── Public API ──────────────────────────────────────────────────────────────
+
+    def generate(self, prompt: str, task: str = "generation", **kwargs) -> str:
+        """Blocking call — returns the full answer as a plain string."""
+        llm = self._build(task, streaming=False)
+        response = llm.invoke([HumanMessage(content=prompt)])
+        return self._clean(response.content)
 
     def stream(self, prompt: str, task: str = "generation", **kwargs) -> Generator[str, None, None]:
-        model = MODELS.get(task, MODELS.get("llm", "nemotron-mini:latest"))
-        payload = {
-            "model": model,
-            "prompt": prompt,
-            "stream": True,
-            "options": {
-                "temperature": 0.15,
-                "top_p": 0.9,
-                "num_predict": 1024 if task == "generation" else 256,
-            },
-        }
+        """Token-level generator — yields raw text chunks."""
+        llm = self._build(task, streaming=True)
+        for chunk in llm.stream([HumanMessage(content=prompt)]):
+            if chunk.content:
+                yield chunk.content
 
-        try:
-            response = requests.post(f"{self.base_url}/api/generate", json=payload, stream=True, timeout=300)
-            response.raise_for_status()
+    def get_chat_model(self, task: str = "generation") -> ChatOllama:
+        """Return a raw ChatOllama for use inside LangGraph nodes with callbacks."""
+        return self._build(task, streaming=True)
 
-            if "deepseek-r1" in model.lower():
-                # Handle deepseek reasoning blocks
-                buffer = ""
-                in_think_block = False
-                for line in response.iter_lines():
-                    if line:
-                        data = json.loads(line)
-                        if "response" in data:
-                            buffer += data["response"]
-                            while True:
-                                if in_think_block:
-                                    end_tag = "</think>"
-                                    end_index = buffer.find(end_tag)
-                                    if end_index != -1:
-                                        buffer = buffer[end_index + len(end_tag) :]
-                                        in_think_block = False
-                                    else:
-                                        break
-                                else:
-                                    start_tag = "<think>"
-                                    start_index = buffer.find(start_tag)
-                                    if start_index != -1:
-                                        yield buffer[:start_index]
-                                        buffer = buffer[start_index:]
-                                        in_think_block = True
-                                    else:
-                                        yield buffer
-                                        buffer = ""
-                                        break
-                if buffer and not in_think_block:
-                    yield buffer
-            else:
-                for line in response.iter_lines():
-                    if line:
-                        data = json.loads(line)
-                        if "response" in data:
-                            yield data["response"]
-        except Exception as e:
-            print(f"Error streaming from Ollama: {e}")
-            yield f"Error: {e}"
+    # ── Helpers ─────────────────────────────────────────────────────────────────
 
-    def _extract_reasoning_answer(self, text: str) -> str:
+    def _clean(self, text: str) -> str:
+        """Strip <think>…</think> blocks emitted by reasoning models."""
         cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
         if not cleaned and "</think>" in text:
             cleaned = text.split("</think>")[-1].strip()

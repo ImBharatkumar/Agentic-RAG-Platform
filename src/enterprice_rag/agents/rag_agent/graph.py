@@ -1,11 +1,25 @@
+import queue
+import threading
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.postgres import PostgresSaver
+from langchain_core.callbacks import BaseCallbackHandler
 from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
 from enterprice_rag.agents.rag_agent.state import AgentState
 from enterprice_rag.agents.rag_agent.nodes import query_analyzer, retriever, reflection, generator
 from enterprice_rag.config.settings import DATABASE_URL
 from langchain_core.messages import HumanMessage
+
+
+class StreamingTokenHandler(BaseCallbackHandler):
+    """Pushes each LLM token into a thread-safe queue as it is generated."""
+    def __init__(self, token_queue: queue.Queue):
+        self.token_queue = token_queue
+
+    def on_llm_new_token(self, token: str, **kwargs) -> None:
+        if token:
+            self.token_queue.put(token)
+
 
 def should_continue(state):
     if state["reflection"] == "yes":
@@ -65,20 +79,35 @@ app = workflow.compile(checkpointer=checkpointer)
 
 
 def run_agent(query: str, thread_id: str = "default"):
-    """Run the RAG agent with episodic memory and stream the answer."""
-    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 5}
+    """Stream the RAG agent answer token-by-token using LangChain callbacks."""
+    q = queue.Queue()
+    handler = StreamingTokenHandler(q)
+
+    config = {
+        "configurable": {"thread_id": thread_id,"token_queue": q},
+        "recursion_limit": 5,
+    }
     inputs = {
         "original_query": query,
         "iterations": 0,
-        # Seed messages with the new human turn; checkpointer appends to history
         "messages": [HumanMessage(content=query)],
     }
 
-    for event in app.stream(inputs, config):
-        if "generator" in event:
-            answer = event["generator"]["answer"]
-            if isinstance(answer, str):
-                # Yield word-by-word for a streaming feel
-                words = answer.split(" ")
-                for i, word in enumerate(words):
-                    yield word + (" " if i < len(words) - 1 else "")
+    def run_graph():# how stream only end response not the thinking
+        
+        try:
+            for _ in app.stream(inputs, config):
+                pass
+        except Exception as e:
+            q.put(f"Error: {e}")
+        finally:
+            q.put(None)  # sentinel — signals end of stream
+
+    threading.Thread(target=run_graph, daemon=True).start()
+
+    while True:
+        token = q.get()
+        if token is None:
+            break
+        yield token
+
