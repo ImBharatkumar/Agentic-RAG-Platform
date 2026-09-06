@@ -11,6 +11,13 @@
 
 ---
 
+## 📚 Documentation
+
+- 📄 **[System Architecture & Technical Deep-Dive](docs/architecture.md)**: End-to-end component analysis, data flow diagrams, architectural decision records (ADRs), and interview defense.
+- 🛠️ **[Operational Runbook & Troubleshooting Guide](docs/troubleshooting.md)**: Common failure modes, recursion limits, latency optimizations, and database fixes.
+
+---
+
 ## 🎯 Overview
 
 The **Enterprise Hybrid RAG Platform** is a sophisticated AI system designed for high-precision document retrieval and reasoning. It features a fully **modular architecture** that allows you to swap LLMs, Embedding models, and Vector Stores with zero changes to the core agent logic.
@@ -69,6 +76,9 @@ graph TB
 
 ```text
 enterprice_rag/
+├── docs/                   # Engineering & Architecture documentation
+│   ├── architecture.md     # In-depth system architecture & interview guide
+│   └── troubleshooting.md  # Operational runbook & failure recovery
 ├── frontend/               # React + Vite Frontend
 │   ├── src/
 │   │   ├── components/     # UI Components (ChatWindow, InputBar, MessageBubble, UploadPanel)
@@ -91,6 +101,7 @@ enterprice_rag/
 │       ├── storage/        # DB models, postgres client & pgvector store
 │       └── utils/          # Shared utilities (logging, text utils)
 ├── main.py                 # API Launcher (Uvicorn / FastAPI)
+├── architecture.md         # Quick-start Architecture overview
 ├── pyproject.toml          # UV configuration & Python dependencies
 └── README.md
 ```
