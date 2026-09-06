@@ -7,7 +7,7 @@ from psycopg_pool import ConnectionPool
 from psycopg.rows import dict_row
 from enterprice_rag.agents.rag_agent.state import AgentState
 from enterprice_rag.agents.rag_agent.nodes import query_analyzer, retriever, reflection, generator
-from enterprice_rag.config.settings import DATABASE_URL
+from enterprice_rag.config.settings import DATABASE_URL, MAX_ITERATIONS
 from langchain_core.messages import HumanMessage
 
 
@@ -22,9 +22,9 @@ class StreamingTokenHandler(BaseCallbackHandler):
 
 
 def should_continue(state):
-    if state["reflection"] == "yes":
+    if state.get("reflection") == "yes":
         return "generate"
-    elif state["iterations"] >= 2:
+    elif state.get("iterations", 0) >= MAX_ITERATIONS:
         return "generate"
     else:
         return "query_analyzer"
@@ -60,7 +60,7 @@ workflow.add_conditional_edges(
 )
 workflow.add_edge("generator", END)
 
-# ── Episodic Memory: PostgresSaver checkpointer ─────────────────────────────
+# ── Episodic Memory: PostgresSaver checkpointer ──────────────────────────────
 # Strip SQLAlchemy dialect prefix — psycopg needs a plain libpq connection string
 _PG_CONN = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
 
@@ -77,24 +77,24 @@ checkpointer.setup()  # creates langgraph_checkpoint tables once
 app = workflow.compile(checkpointer=checkpointer)
 
 
-
 def run_agent(query: str, thread_id: str = "default"):
     """Stream the RAG agent answer token-by-token using LangChain callbacks."""
     q = queue.Queue()
     handler = StreamingTokenHandler(q)
 
     config = {
-        "configurable": {"thread_id": thread_id,"token_queue": q},
-        "recursion_limit": 5,
+        "configurable": {"thread_id": thread_id, "token_queue": q},
+        "recursion_limit": 25,
     }
     inputs = {
         "original_query": query,
         "iterations": 0,
+        "reflection": "",
+        "context": [],
         "messages": [HumanMessage(content=query)],
     }
 
-    def run_graph():# how stream only end response not the thinking
-        
+    def run_graph():
         try:
             for _ in app.stream(inputs, config):
                 pass
@@ -110,4 +110,3 @@ def run_agent(query: str, thread_id: str = "default"):
         if token is None:
             break
         yield token
-
