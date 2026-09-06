@@ -8,58 +8,32 @@
 
 ## 🏛️ High-Level System Architecture
 
-```mermaid
-graph TB
-    subgraph "Frontend Client (React 18 + Vite)"
-        UI["Modern UI / SPA<br/>(Tailwind CSS + EventStream)"]
-        Chat["Chat & History Window"]
-        Upload["Document Ingest Panel"]
-    end
-
-    subgraph "API Gateway (FastAPI + Uvicorn)"
-        API["FastAPI REST & Streaming Server"]
-        CORS["CORS Middleware"]
-        SSE["Token-by-Token StreamingResponse"]
-    end
-
-    subgraph "Ingestion & Context Generation"
-        Docling["Docling Document OCR / Layout Parser"]
-        Chunker["Sentence Chunker (8 sentences/chunk)"]
-        ContextGen["Document-Aware Context Enricher"]
-        Embedder["Dense Embedder (Jina / Gemini)"]
-    end
-
-    subgraph "PostgreSQL 14+ Storage Engine"
-        PGVector["pgvector (Dense Cosine Similarity <=> )"]
-        TSVector["to_tsvector & plainto_tsquery (Sparse BM25)"]
-        RRF["Reciprocal Rank Fusion (k=60)"]
-        Checkpointer["PostgresSaver (Episodic Thread Checkpoints)"]
-    end
-
-    subgraph "Agentic Reasoning Loop (LangGraph)"
-        direction TB
-        QA["Query Analyzer & Classifier"]
-        Retriever["Hybrid Retriever Node"]
-        Reflector["Self-Reflection / Grader Node"]
-        Generator["Grounded Answer Generator"]
-    end
-
-    subgraph "Inference Providers (Ollama / Gemini)"
-        LLM["Granite 4.1:3b / Qwen2.5:3b (Task-Optimized)"]
-    end
-
-    UI --> API
-    API --> Docling
-    Docling --> Chunker --> ContextGen --> Embedder --> PGVector & TSVector
-    API --> SSE --> QA
-    QA -->|Retrieve| Retriever
-    QA -->|Generate Direct| Generator
-    Retriever --> PGVector & TSVector --> RRF --> Reflector
-    Reflector -->|Relevant ('yes')| Generator
-    Reflector -->|Inadequate ('no')| QA
-    Generator --> LLM
-    Checkpointer -.-> QA & Generator
-    Generator --> SSE
+```text
+┌─────────────────────────────────────────────────────────┐
+│              Frontend Layer (React 18 + Vite)           │
+│        Chat & History  •  Document Ingest Panel         │
+└────────────────────────────┬────────────────────────────┘
+                             │ HTTP / SSE Stream
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│              API Gateway (FastAPI + Uvicorn)            │
+│       /chat (Streaming)  •  /ingest  •  /sessions       │
+└──────────────┬───────────────────────────┬──────────────┘
+               │                           │
+  [Ingestion Path]                [Query / Reasoning Path]
+               ▼                           ▼
+┌──────────────────────────────┐ ┌──────────────────────────────┐
+│  Docling OCR & Ingestion     │ │  LangGraph Agentic Workflow  │
+│  Contextual Sentence Chunking│ │  Query Analyzer • Classifier │
+│  Dense Embedder (Jina/Gemini)│ │  Self-Reflection • Generator │
+└──────────────┬───────────────┘ └──────────────┬───────────────┘
+               │                                │
+               ▼                                ▼
+┌─────────────────────────────────────────────────────────┐
+│        PostgreSQL 14+ Storage Engine (pgvector)         │
+│   Dense Vector (<=>)  •  Sparse TSVector (BM25)  •  RRF │
+│        PostgresSaver (Episodic Thread Checkpoints)      │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -30,58 +30,43 @@ This platform solves these problems through an **Agentic, Self-Reflective Hybrid
 
 ### 🏛️ System Architecture Diagram
 
-```mermaid
-graph TB
-    subgraph "Frontend Client (React 18 + Vite)"
-        UI["Modern UI / SPA<br/>(Tailwind CSS + EventStream)"]
-        Chat["Chat & History Window"]
-        Upload["Document Ingest Panel"]
-    end
-
-    subgraph "API Gateway (FastAPI + Uvicorn)"
-        API["FastAPI REST & Streaming Server"]
-        CORS["CORS Middleware"]
-        SSE["Token-by-Token StreamingResponse"]
-    end
-
-    subgraph "Ingestion & Context Generation"
-        Docling["Docling Document OCR / Layout Parser"]
-        Chunker["Sentence Chunker (8 sentences/chunk)"]
-        ContextGen["Document-Aware Context Enricher"]
-        Embedder["Dense Embedder (Jina / Gemini)"]
-    end
-
-    subgraph "PostgreSQL 14+ Storage Engine"
-        PGVector["pgvector (Dense Cosine Similarity <=> )"]
-        TSVector["to_tsvector & plainto_tsquery (Sparse BM25)"]
-        RRF["Reciprocal Rank Fusion (k=60)"]
-        Checkpointer["PostgresSaver (Episodic Thread Checkpoints)"]
-    end
-
-    subgraph "Agentic Reasoning Loop (LangGraph)"
-        direction TB
-        QA["Query Analyzer & Classifier"]
-        Retriever["Hybrid Retriever Node"]
-        Reflector["Self-Reflection / Grader Node"]
-        Generator["Grounded Answer Generator"]
-    end
-
-    subgraph "Inference Providers (Ollama / Gemini)"
-        LLM["Granite 4.1:3b / Qwen2.5:3b (Task-Optimized)"]
-    end
-
-    UI --> API
-    API --> Docling
-    Docling --> Chunker --> ContextGen --> Embedder --> PGVector & TSVector
-    API --> SSE --> QA
-    QA -->|Retrieve| Retriever
-    QA -->|Generate Direct| Generator
-    Retriever --> PGVector & TSVector --> RRF --> Reflector
-    Reflector -->|Relevant ('yes')| Generator
-    Reflector -->|Inadequate ('no')| QA
-    Generator --> LLM
-    Checkpointer -.-> QA & Generator
-    Generator --> SSE
+```text
++-------------------------------------------------------------------------+
+|                    FRONTEND LAYER (React 18 + Vite)                     |
+|  - Modern Single Page App (Tailwind CSS)                                |
+|  - Real-Time Token Streaming Reader                                     |
+|  - Session History Manager & Document Ingest Panel                      |
++------------------------------------+------------------------------------+
+                                     |
+                                     | HTTP / SSE Stream
+                                     v
++-------------------------------------------------------------------------+
+|                    API GATEWAY (FastAPI + Uvicorn)                      |
+|  - POST /chat (StreamingResponse)                                       |
+|  - POST /ingest (Multipart file upload)                                 |
+|  - GET  /sessions/{id}/history (Episodic state retrieval)               |
++------------------+------------------------------------+-----------------+
+                   |                                    |
+       [Document Ingestion Path]               [Query & Reasoning Path]
+                   |                                    |
+                   v                                    v
++------------------------------------+ +----------------------------------+
+|  INGESTION & CONTEXT PIPELINE      | |  LANGGRAPH AGENTIC WORKFLOW      |
+|  - Docling OCR & Layout Parser     | |  - Query Analyzer & Classifier   |
+|  - Sentence-Aware Chunker (8 sents)| |  - Query Rewriter (Co-reference) |
+|  - Contextual Header Generator     | |  - Self-Reflection / Grader Node |
+|  - Dense Embedder (Jina / Gemini)  | |  - Grounded Answer Generator     |
++------------------+-----------------+ +----------------+-----------------+
+                   |                                    |
+                   |                                    | Search & Checkpoint
+                   v                                    v
++-------------------------------------------------------------------------+
+|                  POSTGRESQL 14+ STORAGE ENGINE                          |
+|  - Dense Semantic Vector Store (pgvector <=> cosine distance)          |
+|  - Sparse Full-Text Search (to_tsvector & plainto_tsquery BM25)         |
+|  - Reciprocal Rank Fusion (RRF k=60 ranking algorithm)                  |
+|  - PostgresSaver (Episodic Conversation State Checkpoints)              |
++-------------------------------------------------------------------------+
 ```
 
 ---
@@ -164,34 +149,36 @@ class AgentState(TypedDict):
 
 #### State Machine Flow & Conditional Transitions:
 
-```mermaid
-stateDiagram-v2
-    [*] --> QueryAnalyzer: User Query + History
-
-    state QueryAnalyzer {
-        direction TB
-        Classify: Route as 'retrieve' or 'generate'
-        Rewrite: Query Expansion / Co-reference Resolution
-    }
-
-    QueryAnalyzer --> Retriever: route == 'retrieve'
-    QueryAnalyzer --> Generator: route == 'generate' (Conversational)
-
-    Retriever --> Reflection: Hybrid RRF Search Top-K
-
-    state Reflection {
-        Grade: Evaluate relevance of Top-3 snippets ('yes'/'no')
-    }
-
-    Reflection --> Generator: reflection == 'yes' OR iterations >= MAX_ITERATIONS
-    Reflection --> QueryAnalyzer: reflection == 'no' (Refine query & loop)
-
-    state Generator {
-        Stream: LLM token-by-token streaming via queue
-        Persist: Save Q&A to CSV log & Postgres checkpoint
-    }
-
-    Generator --> [*]
+```text
+                  [User Query + History]
+                            │
+                            ▼
+                  ┌──────────────────┐
+                  │  query_analyzer  │
+                  └─────────┬────────┘
+                            │
+            ┌───────────────┴───────────────┐
+            │ route                         │ route
+            ▼ ('retrieve')                  ▼ ('generate')
+   ┌─────────────────┐             ┌─────────────────┐
+   │    retriever    │             │                 │
+   └────────┬────────┘             │                 │
+            │ Hybrid RRF Search    │                 │
+            ▼                      │                 │
+   ┌─────────────────┐             │                 │
+   │   reflection    │             │                 │
+   └────────┬────────┘             │                 │
+            │                      │    generator    │
+   ┌────────┴────────┐             │                 │
+   │ 'yes' OR        │ 'no'        │                 │
+   │ iterations >= 2 │ (Refine)    │                 │
+   ▼                 ▼             │                 │
+┌───────────────────────┐          │                 │
+│       generator       │◄─────────┴─────────────────┘
+└───────────┬───────────┘
+            │ Token-by-Token Streaming
+            ▼
+         [ END ]
 ```
 
 #### Node Responsibilities:
@@ -237,62 +224,58 @@ stateDiagram-v2
 
 ### 3.1 Document Ingestion Flow
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Frontend as React Client
-    participant API as FastAPI Server
-    participant OCR as Docling OCR Engine
-    participant Embedder as Embedding Provider
-    participant DB as PostgreSQL (pgvector + tsvector)
-
-    User->>Frontend: Upload Document (PDF/DOCX)
-    Frontend->>API: POST /ingest (multipart/form-data)
-    API->>OCR: docling_ocr(temp_file_path)
-    OCR-->>API: Extracted Markdown Text & Tables
-    API->>API: chunk_text() + generate contextual summaries
-    API->>Embedder: embed_batch(situated_chunks)
-    Embedder-->>API: Dense Vector Embeddings (768-dim)
-    API->>DB: INSERT INTO chunks (doc_id, content, context, embedding, search_vector)
-    DB-->>API: Commit Success (N chunks inserted)
-    API-->>Frontend: 200 OK {"filename": ..., "status": "Success", "chunks": N}
-    Frontend-->>User: Update Upload Panel with chunk count
+```text
+[User]
+  │ 1. Uploads PDF/DOCX
+  ▼
+[React Frontend]
+  │ 2. POST /ingest (multipart/form-data)
+  ▼
+[FastAPI Server]
+  │ 3. docling_ocr(temp_file_path)
+  ▼
+[Docling OCR Engine] ──(Extracted Markdown & Tables)──► [FastAPI Server]
+                                                              │
+                                            4. chunk_text() + context headers
+                                                              │
+                                                              ▼
+[Embedding Provider] ◄──(5. embed_batch situated chunks)──────┤
+         │                                                    │
+         └─────────────(Dense 768-dim Vectors)───────────────►│
+                                                              │
+                                            6. Upsert chunks into DB
+                                                              │
+                                                              ▼
+[PostgreSQL Database] ◄───────────────────────────────────────┘
+  (Stores: doc_id, chunk_id, content, context, embedding, search_vector)
 ```
 
 ### 3.2 Conversational Query & Self-Reflective Retrieval Flow
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Frontend as React UI
-    participant API as FastAPI /chat
-    participant Graph as LangGraph Engine
-    participant QA as Query Analyzer
-    participant DB as PostgreSQL (pgvector/tsvector)
-    participant Reflector as Reflection Node
-    participant LLM as Ollama / Granite 4.1:3b
-
-    User->>Frontend: Enter query: "What are tenderer instructions?"
-    Frontend->>API: POST /chat {text, thread_id}
-    API->>Graph: run_agent(query, thread_id)
-    Graph->>QA: query_analyzer(state)
-    QA->>LLM: Rewrite query for vector search
-    LLM-->>QA: "key instructions for tenderers eligibility rules"
-    Graph->>DB: search_hybrid(rewritten_query, vector)
-    DB-->>Graph: Top-5 chunks (via RRF)
-    Graph->>Reflector: reflection(state)
-    Reflector->>LLM: Does context answer question? (yes/no)
-    LLM-->>Reflector: "yes"
-    Graph->>LLM: generator(prompt, stream=True)
-    loop Token Streaming
-        LLM-->>Graph: OnNewToken(token)
-        Graph-->>API: Yield token
-        API-->>Frontend: HTTP Stream chunk
-        Frontend-->>User: Real-time UI typewriter effect
-    end
-    Graph->>DB: Save state checkpoint (PostgresSaver)
+```text
+[User]
+  │ 1. Submits query: "What are the tenderer eligibility instructions?"
+  ▼
+[React Frontend]
+  │ 2. POST /chat {text, thread_id}
+  ▼
+[FastAPI Server]
+  │ 3. run_agent(query, thread_id)
+  ▼
+[LangGraph Engine]
+  │
+  ├─► [query_analyzer] ──(Query Expansion)──► Ollama LLM
+  │
+  ├─► [retriever] ────(Hybrid pgvector + tsvector + RRF)────► [PostgreSQL]
+  │                                                                 │
+  │   ◄───────────────(Top-5 RRF Chunks)────────────────────────────┘
+  │
+  ├─► [reflection] ───(Evaluate relevance: 'yes'/'no')─────► Ollama LLM
+  │
+  └─► [generator] ────(Stream tokens via queue)─────────────► Ollama LLM
+            │
+            ├─► Real-time chunks streamed to FastAPI ──► React UI Typewriter Effect
+            └─► Checkpoint saved to PostgreSQL (PostgresSaver)
 ```
 
 ---

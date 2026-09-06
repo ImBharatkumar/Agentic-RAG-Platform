@@ -35,39 +35,32 @@ The **Enterprise Hybrid RAG Platform** is a sophisticated AI system designed for
 
 ## 🏗️ Architecture
 
-```mermaid
-graph TB
-    subgraph "Frontend Layer"
-        UI[React + Vite UI]
-    end
-
-    subgraph "API & Ingestion"
-        API[FastAPI Server]
-        OCR[Docling OCR & Ingestion]
-    end
-
-    subgraph "Core Framework"
-        Factory[Provider Factory]
-        Proto[Protocols/Interfaces]
-    end
-
-    subgraph "Pluggable Providers"
-        LLM[LLM: Ollama/Gemini]
-        Embed[Embed: Gemini/Jina]
-        Store[Store: Postgres/pgvector]
-    end
-    
-    subgraph "Agentic Reasoning"
-        Graph[LangGraph Workflow]
-        Nodes[Modular Nodes & Checkpointer]
-    end
-
-    UI --> API
-    API --> OCR & Graph
-    Proto --> Factory
-    Factory --> LLM & Embed & Store
-    LLM & Embed & Store --> Nodes
-    Nodes --> Graph
+```text
+┌─────────────────────────────────────────────────────────┐
+│              Frontend Layer (React 18 + Vite)           │
+│        Chat & History  •  Document Ingest Panel         │
+└────────────────────────────┬────────────────────────────┘
+                             │ HTTP / SSE Stream
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│              API Gateway (FastAPI + Uvicorn)            │
+│       /chat (Streaming)  •  /ingest  •  /sessions       │
+└──────────────┬───────────────────────────┬──────────────┘
+               │                           │
+  [Ingestion Path]                [Query / Reasoning Path]
+               ▼                           ▼
+┌──────────────────────────────┐ ┌──────────────────────────────┐
+│  Docling OCR & Ingestion     │ │  LangGraph Agentic Workflow  │
+│  Contextual Sentence Chunking│ │  Query Analyzer • Classifier │
+│  Dense Embedder (Jina/Gemini)│ │  Self-Reflection • Generator │
+└──────────────┬───────────────┘ └──────────────┬───────────────┘
+               │                                │
+               ▼                                ▼
+┌─────────────────────────────────────────────────────────┐
+│        PostgreSQL 14+ Storage Engine (pgvector)         │
+│   Dense Vector (<=>)  •  Sparse TSVector (BM25)  •  RRF │
+│        PostgresSaver (Episodic Thread Checkpoints)      │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
