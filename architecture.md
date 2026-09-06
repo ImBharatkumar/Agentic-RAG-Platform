@@ -1,6 +1,7 @@
 # 🏛️ Enterprise Hybrid RAG Platform — System Architecture & Engineering Deep-Dive
 
 > Complete documentation is maintained in the [`docs/`](file:///home/barry/enterprice_rag/docs/) folder:
+> - 🌐 **[Interactive Architecture & Data Flow Visualizer](file:///home/barry/enterprice_rag/docs/system_overview.html)**
 > - 📄 **[Detailed Architecture Specification](file:///home/barry/enterprice_rag/docs/architecture.md)**
 > - 🛠️ **[Operational Runbook & Troubleshooting Guide](file:///home/barry/enterprice_rag/docs/troubleshooting.md)**
 
@@ -46,4 +47,4 @@
 4. **Episodic PostgreSQL Memory**: Uses `PostgresSaver` connection pooling to checkpoint state across conversational turns.
 5. **Real-Time Token Streaming**: Streams generated tokens directly from LangGraph callbacks through FastAPI to the React UI.
 
-👉 **For in-depth analysis, design trade-offs, and interview defense questions, see [`docs/architecture.md`](file:///home/barry/enterprice_rag/docs/architecture.md).**
+👉 **For interactive visual flowcharts, open [`docs/system_overview.html`](file:///home/barry/enterprice_rag/docs/system_overview.html). For in-depth analysis, design trade-offs, and interview defense questions, see [`docs/architecture.md`](file:///home/barry/enterprice_rag/docs/architecture.md).**

@@ -13,6 +13,7 @@
 
 ## 📚 Documentation
 
+- 🌐 **[Interactive Architecture & Data Flow Visualizer](docs/system_overview.html)**: Standalone interactive UI explaining system data flow, session memory, streaming, and caching roadmap.
 - 📄 **[System Architecture & Technical Deep-Dive](docs/architecture.md)**: End-to-end component analysis, data flow diagrams, architectural decision records (ADRs), and interview defense.
 - 🛠️ **[Operational Runbook & Troubleshooting Guide](docs/troubleshooting.md)**: Common failure modes, recursion limits, latency optimizations, and database fixes.
 
@@ -70,6 +71,7 @@ The **Enterprise Hybrid RAG Platform** is a sophisticated AI system designed for
 ```text
 enterprice_rag/
 ├── docs/                   # Engineering & Architecture documentation
+│   ├── system_overview.html# Interactive HTML architecture & data flow visualizer
 │   ├── architecture.md     # In-depth system architecture & interview guide
 │   └── troubleshooting.md  # Operational runbook & failure recovery
 ├── frontend/               # React + Vite Frontend
