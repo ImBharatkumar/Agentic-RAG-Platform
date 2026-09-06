@@ -7,53 +7,56 @@ from langchain_core.messages import HumanMessage, AIMessage
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
 QUERY_REWRITE_PROMPT = """You are a search query optimizer.
-Rewrite the following search query to be highly effective for vector search (semantic retrieval) and keyword search.
-Output ONLY the rewritten query and nothing else.
+Rewrite the following search query to be highly effective for vector search and keyword search.
+Output ONLY the rewritten search keywords/query and nothing else.
 
 Original: {query}
 
 Rewritten query:"""
 
-QUERY_REWRITE_WITH_HISTORY_PROMPT = """You are a search query optimizer with awareness of conversation history.
-Use the prior conversation to resolve references like "that", "it", "the same", "section X", etc.
-Output ONLY the rewritten, self-contained query — no explanations.
+QUERY_REWRITE_WITH_HISTORY_PROMPT = """You are a search query optimizer aware of conversation history.
+Use the prior conversation to resolve ambiguous references (e.g., "it", "that", "the previous section").
+Output ONLY the rewritten, self-contained search query.
 
-Conversation history (most recent last):
+Conversation history:
 {history}
 
 Current query: {query}
 
 Rewritten query:"""
 
-QUERY_REFINE_PROMPT = """The previous search didn't work well. Create a better search query.
+QUERY_REFINE_PROMPT = """The previous search didn't retrieve adequate information. Create an improved search query.
+Output ONLY the new search query.
 
 Previous query: {previous_query}
-What was found: {context_summary}
+Retrieved summary: {context_summary}
 
 Better query:"""
 
-REFLECTION_PROMPT = """Can this context answer the question? Reply only 'yes' or 'no'.
+REFLECTION_PROMPT = """Does the following context contain information relevant to answering the question?
+Reply ONLY 'yes' or 'no'.
 
 Question: {query}
-Context: {context_preview}
+Context:
+{context_preview}
 
 Answer:"""
 
-CLASSIFY_PROMPT = """Analyze the conversation history and the user's new query.
-Decide if we need to search the database of external documents to answer the query, or if it can be answered using only the conversation history (e.g. conversational responses, follow-up clarification, requests to summarize/explain the previous turn).
+CLASSIFY_PROMPT = """Analyze the conversation history and user query.
+Determine whether to retrieve external documents or generate a direct conversational response.
 
-Respond with exactly one word:
-'retrieve' - if the query requires looking up new information or documents.
-'generate' - if the query is conversational (like hello, thanks), a clarification, or asks about the previous answers/context.
+Reply ONLY with 'retrieve' or 'generate':
+- 'retrieve': requires searching documents or database.
+- 'generate': conversational greeting, follow-up clarification, or summary of prior turn.
 
 Conversation history:
 {history}
 
-New Query: {query}
+Query: {query}
 
 Response:"""
 
-GENERATION_PROMPT = """Answer the following question based *only* on the provided context.
+GENERATION_PROMPT = """Answer the following question based only on the provided context.
 
 Question: {query}
 
@@ -62,10 +65,9 @@ Context:
 
 Answer:"""
 
-GENERATION_PROMPT_WITH_HISTORY = """Answer the following question based on the provided context and the prior conversation.
-If the context is not sufficient, but the answer is clear from the prior conversation, use the prior conversation to answer.
+GENERATION_PROMPT_WITH_HISTORY = """Answer the following question based on the provided context and prior conversation.
 
-Conversation history (most recent last):
+Conversation history:
 {history}
 
 Question: {query}
@@ -87,9 +89,9 @@ def query_analyzer(state):
 
     if iterations > 0:
         # Iterative refinement: previous retrieval pass didn't satisfy reflection
-        previous_query = state["rewritten_query"]
+        previous_query = state.get("rewritten_query", original_query)
         context = state.get("context", [])
-        context_summary = " | ".join([c["content"][:100] for c in context])
+        context_summary = " | ".join([c["content"][:80] for c in context[:3]])
         prompt = QUERY_REFINE_PROMPT.format(
             previous_query=previous_query, context_summary=context_summary
         )
@@ -97,20 +99,19 @@ def query_analyzer(state):
         route = "retrieve"
     else:
         # First pass: use conversation history if available to classify and resolve references
-        # Exclude the current HumanMessage (last item) to get prior turns
         history_msgs = messages[:-1][-6:] if len(messages) > 1 else []
 
         if history_msgs:
             history_str = "\n".join(
-                f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content[:300]}"
+                f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content[:200]}"
                 for m in history_msgs
             )
-            # Classify whether this query actually needs retrieval or is just conversational / follow-up
+            # Fast classification with 10-token cap
             classify_prompt = CLASSIFY_PROMPT.format(history=history_str, query=original_query)
-            classification = llm.generate(classify_prompt, task="reflection").strip().lower()
+            classification = llm.generate(classify_prompt, task="classification").strip().lower()
             print(f"Classification result: '{classification}'")
 
-            if "generate" in classification:
+            if "generate" in classification and "retrieve" not in classification:
                 route = "generate"
                 rewritten_query = original_query
             else:
@@ -148,21 +149,22 @@ def reflection(state):
     print("---REFLECTING---")
     llm = get_llm()
     original_query = state["original_query"]
-    context = state["context"]
+    context = state.get("context", [])
 
     if not context:
         return {"reflection": "no"}
 
-    context_preview = "\n".join([c["content"][:200] + "..." for c in context])
+    # Use top 3 snippets preview with 150 chars each to keep the prompt small & blazing fast
+    context_preview = "\n".join([f"- {c['content'][:150]}..." for c in context[:3]])
     prompt = REFLECTION_PROMPT.format(query=original_query, context_preview=context_preview)
     result = llm.generate(prompt, task="reflection").strip().lower()
 
-    if "yes" in result.split()[0]:
+    if "yes" in result:
         decision = "yes"
-    elif "no" in result.split()[0]:
+    elif "no" in result:
         decision = "no"
     else:
-        decision = "yes" if state["iterations"] > 0 else "no"
+        decision = "yes" if state.get("iterations", 0) > 0 else "no"
 
     print(f"Decision: {decision}")
     return {"reflection": decision}
